@@ -33,7 +33,7 @@ namespace CreateTimeLapse
             }
             else
             {
-                Console.WriteLine($"usage : <url> <output_avi_path> <Recording hour> [interval = 1] [fps = 30] [Username] [Password]");
+                Console.WriteLine($"usage : <url> <output_avi_path> <Recording minute> [interval = 1] [fps = 30] [Username] [Password]");
             }
         }
     }
