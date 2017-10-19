@@ -1,9 +1,7 @@
-﻿using OpenCvSharp;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -46,7 +44,7 @@ namespace Util
 				Thread.Sleep(interval * 1000); // as milleseconds
 			}
 
-            result_path = ConvertJpegToAviWithffmpeg(outputPath);
+            result_path = ConvertJpegToAviWithffmpeg(outputPath, fps);
 
 
             if (File.Exists(result_path))
@@ -126,12 +124,12 @@ namespace Util
             else
                 return false;
         }
-        public static string ConvertJpegToAviWithffmpeg(string srcPath)
+        public static string ConvertJpegToAviWithffmpeg(string srcPath, int fps=30)
         {
             string outputFileName = Path.Combine(srcPath,$"{DateTime.Now.ToString("yyyyMMdd_HHmmss")}.mp4");
 
             string commandStr = @"/usr/bin/ffmpeg";
-            string optionStr = $"-f image2 -r 30 -i {srcPath}/Image_%08d.jpg -r 30 -an -vcodec libx264 -pix_fmt yuv420p {outputFileName}";
+            string optionStr = $"-f image2 -r 30 -i {srcPath}/Image_%08d.jpg -r {fps} -an -vcodec libx264 -pix_fmt yuv420p {outputFileName}";
 
 			var psi = new ProcessStartInfo(commandStr, optionStr) { UseShellExecute = false, CreateNoWindow = true };
 			Process p = System.Diagnostics.Process.Start(psi);
