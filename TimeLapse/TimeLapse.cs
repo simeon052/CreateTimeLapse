@@ -12,38 +12,59 @@ namespace Util
 {
     public static class TimeLapse
     {
-        public static async Task<string> GetAsync(string url, string output_file, int recording_seconds, int interval, int fps, string username = null, string password = "")
+        public static async Task<string> GetAsync(string url, string outputPath, int recording_seconds, int interval, int fps, string username = null, string password = "")
         {
             string result_path = null;
 
-            int record_times = recording_seconds / interval; // 撮影回数
-            var jpegFileList = new List<string>();
-
-            for(int count = 0; count < record_times; count++)
+            if (!Directory.Exists(outputPath))
             {
-                string jpegFileNamePath = Path.Combine(Path.GetTempPath(), $"Image_{count:D8}.jpg");
-                await DownloadRemoteImageFileAsync(url, jpegFileNamePath, username, password).ConfigureAwait(false);
-                jpegFileList.Add(jpegFileNamePath);
-                Console.WriteLine($"{count} - {jpegFileNamePath}");
-                Thread.Sleep(interval * 1000); // as milleseconds
-                
+                return string.Empty;
             }
 
-            if (ConvertJpegToAviWithOpenCV(jpegFileList, output_file))
-            {
-                result_path = output_file;
-            } 
+            int record_times = recording_seconds / interval; // 撮影回数
+            var jpegFileList = new List<string>();
+			var commandStr = $"/usr/bin/mogrify";
 
-            foreach(var f in jpegFileList)
+            var directryName = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            outputPath = Path.Combine(outputPath, directryName);
+            if (!Directory.Exists(outputPath))
             {
-                // Delete Jpeg files
-                if (File.Exists(f))
+                Directory.CreateDirectory(outputPath);
+            }
+
+			for (int count = 0; count < record_times; count++)
+            {
+                string jpegFileNamePath = Path.Combine(outputPath, $"Image_{count:D8}.jpg");
+                await DownloadRemoteImageFileAsync(url, jpegFileNamePath, username, password).ConfigureAwait(false);
+				var optionStr = $"-fill yellow -gravity SouthWest -font helvetica -pointsize 45 -annotate +35+10 \"{DateTime.Now.ToString("yyyy/MM/dd-HH:mm:ss")}\" {jpegFileNamePath}";
+				jpegFileList.Add(jpegFileNamePath);
+                Console.WriteLine($"{count} - {jpegFileNamePath}");
+
+                //System.Console.WriteLine($"Execute : {commandStr} {optionStr}");
+                var psi = new ProcessStartInfo(commandStr, optionStr) { UseShellExecute = false, CreateNoWindow = true };
+                Process p = System.Diagnostics.Process.Start(psi);
+				Thread.Sleep(interval * 1000); // as milleseconds
+			}
+
+            result_path = ConvertJpegToAviWithffmpeg(outputPath);
+
+
+            if (File.Exists(result_path))
+            {
+                foreach (var f in jpegFileList)
                 {
-                    try
+                    // Delete Jpeg files
+                    if (File.Exists(f))
                     {
-                        File.Delete(f);
+                        try
+                        {
+                            File.Delete(f);
+                        }
+                        catch
+                        {
+                            ; // Ignore
+                        }
                     }
-                    catch { }
                 }
             }
 
@@ -105,46 +126,18 @@ namespace Util
             else
                 return false;
         }
-
-        public static bool ConvertJpegToAviWithOpenCV(List<string> fileLists, string filename)
+        public static string ConvertJpegToAviWithffmpeg(string srcPath)
         {
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-            try
-            {
-                if (fileLists.Count == 0) throw new ArgumentOutOfRangeException();
+            string outputFileName = Path.Combine(srcPath,$"{DateTime.Now.ToString("yyyyMMdd_HHmmss")}.mp4");
 
-                (var imageWidth, var imageHeight) = GetImageSize(fileLists.First());
-                using (VideoWriter cvw = new VideoWriter(filename, FourCC.MJPG, 30, new OpenCvSharp.Size(imageWidth, imageHeight)))
-                {
-                    foreach (var f in fileLists)
-                    {
-                        if (File.Exists(f))
-                        {
-                            using (Mat m = new Mat(f))
-                            {
-                                cvw.Write(m);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                System.Diagnostics.Debug.WriteLine(e.ToString());
-                return false;
-            }
-            System.Diagnostics.Debug.WriteLine($"time: {sw.Elapsed}");
-            return true;
+            string commandStr = @"/usr/bin/ffmpeg";
+            string optionStr = $"-f image2 -r 30 -i {srcPath}/Image_%08d.jpg -r 30 -an -vcodec libx264 -pix_fmt yuv420p {outputFileName}";
+
+			var psi = new ProcessStartInfo(commandStr, optionStr) { UseShellExecute = false, CreateNoWindow = true };
+			Process p = System.Diagnostics.Process.Start(psi);
+            p.WaitForExit();
+
+            return outputFileName;
         }
-        
-        static (int width, int height) GetImageSize(string f)
-        {
-            using (Mat m = new Mat(f))
-            {
-                return (m.Width, m.Height);
-            }
-        }
-        
     }
 }
