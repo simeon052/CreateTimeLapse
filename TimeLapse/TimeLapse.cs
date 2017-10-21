@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,13 +37,11 @@ namespace Util
                 int count = 0;
                 var timer = new System.Timers.Timer();
                 timer.Interval = 1000;
-                Exception exs = null;
-
                 timer.Elapsed += (async (s, e) =>
                 {
                     try
                     {
-                        string jpegFileNamePath = Path.Combine(outputPath, $"Image_{++count:D8}.jpg");
+                        string jpegFileNamePath = Path.Combine(outputPath, $"Image_{(++count)-1:D8}.jpg");
                         await DownloadRemoteImageFileAsync(url, jpegFileNamePath, username, password).ConfigureAwait(false);
                         var optionStr = $"-fill yellow -gravity SouthWest -font helvetica -pointsize 45 -annotate +35+10 \"{DateTime.Now.ToString("yyyy/MM/dd-HH:mm:ss")}\" {jpegFileNamePath}";
                         jpegFileList.Add(jpegFileNamePath);
@@ -52,8 +51,12 @@ namespace Util
                         {
                             // System.Console.WriteLine($"Execute : {commandStr} {optionStr}");
                             var psi = new ProcessStartInfo(commandStr, optionStr) { UseShellExecute = false, CreateNoWindow = true };
-                            Process p = System.Diagnostics.Process.Start(psi);
-                        }
+//                            Process p = System.Diagnostics.Process.Start(psi);
+                        } else {
+                            Console.WriteLine($"{jpegFileNamePath} creattion failed.");
+                            File.Copy(jpegFileList.Last(), jpegFileNamePath);
+                        }      
+                        
                         if (count > record_times)
                         {
                             mre.Set();
@@ -61,18 +64,13 @@ namespace Util
                     }
                     catch(Exception ex)
                     {
-                        exs = ex;
-                        mre.Set();
+                        Console.WriteLine($"Some exception {ex.ToString()}");
                     }
                 });
                 timer.Start();
 
                 mre.WaitOne();
                 timer.Stop();
-                if(exs != null)
-                {
-                    throw exs;
-                }
 
 
                 result_path = ConvertJpegToAviWithffmpeg(outputPath, fps);
@@ -163,8 +161,8 @@ namespace Util
             string optionStr = $"-f image2 -r 30 -i {srcPath}/Image_%08d.jpg -r {fps} -an -vcodec libx264 -pix_fmt yuv420p {outputFileName}";
 
 			var psi = new ProcessStartInfo(commandStr, optionStr) { UseShellExecute = false, CreateNoWindow = true };
-            Process p = System.Diagnostics.Process.Start(psi);
-            p.WaitForExit();
+            //Process p = System.Diagnostics.Process.Start(psi);
+            //p.WaitForExit();
 
             return outputFileName;
         }
