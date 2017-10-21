@@ -51,7 +51,7 @@ namespace Util
                         {
                             // System.Console.WriteLine($"Execute : {commandStr} {optionStr}");
                             var psi = new ProcessStartInfo(commandStr, optionStr) { UseShellExecute = false, CreateNoWindow = true };
-//                            Process p = System.Diagnostics.Process.Start(psi);
+                            Process p = System.Diagnostics.Process.Start(psi);
                         } else {
                             Console.WriteLine($"{jpegFileNamePath} creattion failed.");
                             File.Copy(jpegFileList.Last(), jpegFileNamePath);
@@ -161,8 +161,8 @@ namespace Util
             string optionStr = $"-f image2 -r 30 -i {srcPath}/Image_%08d.jpg -r {fps} -an -vcodec libx264 -pix_fmt yuv420p {outputFileName}";
 
 			var psi = new ProcessStartInfo(commandStr, optionStr) { UseShellExecute = false, CreateNoWindow = true };
-            //Process p = System.Diagnostics.Process.Start(psi);
-            //p.WaitForExit();
+            Process p = System.Diagnostics.Process.Start(psi);
+            p.WaitForExit();
 
             return outputFileName;
         }
