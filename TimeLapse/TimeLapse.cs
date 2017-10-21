@@ -13,59 +13,93 @@ namespace Util
         public static async Task<string> GetAsync(string url, string outputPath, int recording_seconds, int interval, int fps, string username = null, string password = "")
         {
             string result_path = null;
-
-            if (!Directory.Exists(outputPath))
+            try
             {
-                return string.Empty;
-            }
-
-            int record_times = recording_seconds / interval; // 撮影回数
-            var jpegFileList = new List<string>();
-			var commandStr = $"/usr/bin/mogrify";
-
-            var directryName = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            outputPath = Path.Combine(outputPath, directryName);
-            if (!Directory.Exists(outputPath))
-            {
-                Directory.CreateDirectory(outputPath);
-            }
-
-			for (int count = 0; count < record_times; count++)
-            {
-                string jpegFileNamePath = Path.Combine(outputPath, $"Image_{count:D8}.jpg");
-                await DownloadRemoteImageFileAsync(url, jpegFileNamePath, username, password).ConfigureAwait(false);
-				var optionStr = $"-fill yellow -gravity SouthWest -font helvetica -pointsize 45 -annotate +35+10 \"{DateTime.Now.ToString("yyyy/MM/dd-HH:mm:ss")}\" {jpegFileNamePath}";
-				jpegFileList.Add(jpegFileNamePath);
-                Console.WriteLine($"{count} - {jpegFileNamePath}");
-
-                //System.Console.WriteLine($"Execute : {commandStr} {optionStr}");
-                var psi = new ProcessStartInfo(commandStr, optionStr) { UseShellExecute = false, CreateNoWindow = true };
-                Process p = System.Diagnostics.Process.Start(psi);
-				Thread.Sleep(interval * 1000); // as milleseconds
-			}
-
-            result_path = ConvertJpegToAviWithffmpeg(outputPath, fps);
-
-
-            if (File.Exists(result_path))
-            {
-                foreach (var f in jpegFileList)
+                if (!Directory.Exists(outputPath))
                 {
-                    // Delete Jpeg files
-                    if (File.Exists(f))
+                    return string.Empty;
+                }
+
+                int record_times = recording_seconds / interval; // 撮影回数
+                var jpegFileList = new List<string>();
+                var commandStr = $"/usr/bin/mogrify";
+
+                var directryName = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                outputPath = Path.Combine(outputPath, directryName);
+                if (!Directory.Exists(outputPath))
+                {
+                    Directory.CreateDirectory(outputPath);
+                }
+
+                var mre = new ManualResetEvent(false);
+                mre.Reset();
+                int count = 0;
+                var timer = new System.Timers.Timer();
+                timer.Interval = 1000;
+                Exception exs = null;
+
+                timer.Elapsed += (async (s, e) =>
+                {
+                    try
                     {
-                        try
+                        string jpegFileNamePath = Path.Combine(outputPath, $"Image_{++count:D8}.jpg");
+                        await DownloadRemoteImageFileAsync(url, jpegFileNamePath, username, password).ConfigureAwait(false);
+                        var optionStr = $"-fill yellow -gravity SouthWest -font helvetica -pointsize 45 -annotate +35+10 \"{DateTime.Now.ToString("yyyy/MM/dd-HH:mm:ss")}\" {jpegFileNamePath}";
+                        jpegFileList.Add(jpegFileNamePath);
+                        Console.WriteLine($"{count} - {jpegFileNamePath}");
+
+                        if (File.Exists(jpegFileNamePath))
                         {
-                            File.Delete(f);
+                            // System.Console.WriteLine($"Execute : {commandStr} {optionStr}");
+                            var psi = new ProcessStartInfo(commandStr, optionStr) { UseShellExecute = false, CreateNoWindow = true };
+                            Process p = System.Diagnostics.Process.Start(psi);
                         }
-                        catch
+                        if (count > record_times)
                         {
-                            ; // Ignore
+                            mre.Set();
+                        }
+                    }
+                    catch(Exception ex)
+                    {
+                        exs = ex;
+                        mre.Set();
+                    }
+                });
+                timer.Start();
+
+                mre.WaitOne();
+                timer.Stop();
+                if(exs != null)
+                {
+                    throw exs;
+                }
+
+
+                result_path = ConvertJpegToAviWithffmpeg(outputPath, fps);
+
+
+                if (File.Exists(result_path))
+                {
+                    foreach (var f in jpegFileList)
+                    {
+                        // Delete Jpeg files
+                        if (File.Exists(f))
+                        {
+                            try
+                            {
+                                File.Delete(f);
+                            }
+                            catch
+                            {
+                                ; // Ignore
+                            }
                         }
                     }
                 }
+            }catch(Exception e)
+            {
+                throw e;
             }
-
             return result_path;
         }
 
@@ -86,15 +120,8 @@ namespace Util
             }
 
             HttpWebResponse response;
-            try
-            {
-                response = (HttpWebResponse)request.GetResponse();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex.ToString());
-                return false;
-            }
+
+            response = (HttpWebResponse)request.GetResponse();
 
             // Check that the remote file was found. The ContentType
             // check is performed since a request for a non-existent
@@ -122,8 +149,12 @@ namespace Util
                 return true;
             }
             else
-                return false;
+            {
+                throw new HttpListenerException(0, $"failed by : {response.StatusCode}");
+            }
+
         }
+
         public static string ConvertJpegToAviWithffmpeg(string srcPath, int fps=30)
         {
             string outputFileName = Path.Combine(srcPath,$"{DateTime.Now.ToString("yyyyMMdd_HHmmss")}.mp4");
@@ -132,7 +163,7 @@ namespace Util
             string optionStr = $"-f image2 -r 30 -i {srcPath}/Image_%08d.jpg -r {fps} -an -vcodec libx264 -pix_fmt yuv420p {outputFileName}";
 
 			var psi = new ProcessStartInfo(commandStr, optionStr) { UseShellExecute = false, CreateNoWindow = true };
-			Process p = System.Diagnostics.Process.Start(psi);
+            Process p = System.Diagnostics.Process.Start(psi);
             p.WaitForExit();
 
             return outputFileName;
