@@ -37,15 +37,17 @@ namespace Util
                 int count = 0;
                 var timer = new System.Timers.Timer();
                 timer.Interval = 1000;
+                SemaphoreSlim sem = new SemaphoreSlim(1, 1);
                 timer.Elapsed += (async (s, e) =>
                 {
                     try
                     {
+                        await sem.WaitAsync();
                         string jpegFileNamePath = Path.Combine(outputPath, $"Image_{(++count)-1:D8}.jpg");
                         await DownloadRemoteImageFileAsync(url, jpegFileNamePath, username, password).ConfigureAwait(false);
                         var optionStr = $"-fill yellow -gravity SouthWest -font helvetica -pointsize 45 -annotate +35+10 \"{DateTime.Now.ToString("yyyy/MM/dd-HH:mm:ss")}\" {jpegFileNamePath}";
                         jpegFileList.Add(jpegFileNamePath);
-                        Console.WriteLine($"{count} - {jpegFileNamePath}");
+                        Console.WriteLine($"{count} - {jpegFileNamePath} -- {DateTime.Now.ToLongTimeString()}");
 
                         if (File.Exists(jpegFileNamePath))
                         {
@@ -61,6 +63,7 @@ namespace Util
                         {
                             mre.Set();
                         }
+                        sem.Release();
                     }
                     catch(Exception ex)
                     {
@@ -80,8 +83,9 @@ namespace Util
                 {
                     foreach (var f in jpegFileList)
                     {
+
                         // Delete Jpeg files
-                        if (File.Exists(f))
+
                         {
                             try
                             {
@@ -158,7 +162,7 @@ namespace Util
             string outputFileName = Path.Combine(srcPath,$"{DateTime.Now.ToString("yyyyMMdd_HHmmss")}.mp4");
 
             string commandStr = @"/usr/bin/ffmpeg";
-            string optionStr = $"-f image2 -r 30 -i {srcPath}/Image_%08d.jpg -r {fps} -an -vcodec libx264 -pix_fmt yuv420p {outputFileName}";
+            string optionStr = $"-f image2 -r 30 -i {srcPath}/Image_%08d.jpg -r {fps} -an -crf 18 -preset veryfast -vcodec libx264 -pix_fmt yuv420p {outputFileName}";
 
 			var psi = new ProcessStartInfo(commandStr, optionStr) { UseShellExecute = false, CreateNoWindow = true };
             Process p = System.Diagnostics.Process.Start(psi);
